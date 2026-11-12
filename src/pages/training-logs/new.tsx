@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import type { FormEvent } from "react";
 import type { GetServerSidePropsContext } from "next";
 import Image from "next/image";
@@ -14,19 +14,20 @@ import Animal from "@/models/Animal";
 const heebo = Heebo({ subsets: ["latin"] });
 
 const inputClassName =
-  "mt-2 w-full rounded-md border border-gray-300 px-4 py-3 text-lg focus:border-[#D21312] focus:outline-2 focus:outline-[#D21312]";
+  "mt-2 w-full min-w-0 rounded-md border border-gray-300 px-3 py-3 text-base focus:border-[#D21312] focus:outline-2 focus:outline-[#D21312] sm:px-4 sm:text-lg";
 
 type CreateTrainingLogProps = {
   currentUser: {
     fullName: string;
     isAdmin: boolean;
   };
-  animals: { id: string; name: string }[];
+  animals: { id: string; name: string; breed: string }[];
 };
 
 type AnimalRecord = {
   _id: { toString(): string };
   name: string;
+  breed: string;
 };
 
 export async function getServerSideProps(context: GetServerSidePropsContext) {
@@ -41,7 +42,11 @@ export async function getServerSideProps(context: GetServerSidePropsContext) {
   }).sort({ name: 1 });
 
   const animals = records.map(function (animal) {
-    return { id: animal._id.toString(), name: animal.name };
+    return {
+      id: animal._id.toString(),
+      name: animal.name,
+      breed: animal.breed,
+    };
   });
 
   return { props: { currentUser, animals } };
@@ -54,6 +59,11 @@ export default function CreateTrainingLog({
   const router = useRouter();
   const [message, setMessage] = useState("");
   const [saving, setSaving] = useState(false);
+  const [displayDate, setDisplayDate] = useState<Date | null>(null);
+
+  useEffect(function () {
+    setDisplayDate(new Date());
+  }, []);
 
   async function handleSave(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -65,6 +75,7 @@ export default function CreateTrainingLog({
     const month = String(today.getMonth() + 1).padStart(2, "0");
     const day = String(today.getDate()).padStart(2, "0");
 
+    setDisplayDate(today);
     setMessage("");
     setSaving(true);
 
@@ -74,7 +85,7 @@ export default function CreateTrainingLog({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           title: formData.get("title"),
-          animalId: String(formData.get("animalId")).trim(),
+          animalId: formData.get("animalId"),
           hours: Number(formData.get("hours")),
           description: formData.get("description"),
           date: `${year}-${month}-${day}`,
@@ -135,37 +146,36 @@ export default function CreateTrainingLog({
 
             <div>
               <label htmlFor="animalId" className="block text-lg font-medium">
-                Animal ID
+                Select Animal
               </label>
-              <input
+              <select
                 id="animalId"
                 name="animalId"
-                type="text"
-                placeholder="Enter the animal’s ID"
+                defaultValue=""
                 required
+                disabled={animals.length === 0}
                 className={inputClassName}
-              />
+              >
+                <option value="" disabled>Choose an animal</option>
+                {animals.map(function (animal) {
+                  return (
+                    <option key={animal.id} value={animal.id}>
+                      {animal.name} - {animal.breed}
+                    </option>
+                  );
+                })}
+              </select>
 
-              {animals.length === 0 ? (
+              {animals.length === 0 && (
                 <Link href="/animals/new" className="mt-2 block text-sm text-red-700 underline">
                   Add an animal before creating a training log.
                 </Link>
-              ) : (
-                <ul className="mt-2 space-y-1 text-sm text-gray-600">
-                  {animals.map(function (animal) {
-                    return (
-                      <li key={animal.id} className="break-words">
-                        {animal.name} · <code>{animal.id}</code>
-                      </li>
-                    );
-                  })}
-                </ul>
               )}
             </div>
 
             <div>
               <label htmlFor="hours" className="block text-lg font-medium">
-                Hours trained
+                Total hours trained
               </label>
               <input
                 id="hours"
@@ -179,9 +189,58 @@ export default function CreateTrainingLog({
               />
             </div>
 
+            <fieldset aria-describedby="training-date-help">
+              <legend className="sr-only">Training date</legend>
+
+              <div className="grid grid-cols-[1.4fr_1fr_1.4fr] gap-3 sm:gap-6">
+                <div className="min-w-0">
+                  <label htmlFor="month" className="block text-lg font-medium">
+                    Month
+                  </label>
+                  <input
+                    id="month"
+                    type="text"
+                    value={displayDate?.toLocaleDateString("en-US", { month: "long" }) ?? ""}
+                    readOnly
+                    className={`${inputClassName} bg-gray-50 text-gray-700`}
+                  />
+                </div>
+
+                <div className="min-w-0">
+                  <label htmlFor="day" className="block text-lg font-medium">
+                    Date
+                  </label>
+                  <input
+                    id="day"
+                    type="text"
+                    value={displayDate?.getDate() ?? ""}
+                    readOnly
+                    className={`${inputClassName} bg-gray-50 text-gray-700`}
+                  />
+                </div>
+
+                <div className="min-w-0">
+                  <label htmlFor="year" className="block text-lg font-medium">
+                    Year
+                  </label>
+                  <input
+                    id="year"
+                    type="text"
+                    value={displayDate?.getFullYear() ?? ""}
+                    readOnly
+                    className={`${inputClassName} bg-gray-50 text-gray-700`}
+                  />
+                </div>
+              </div>
+
+              <p id="training-date-help" className="mt-1 text-sm text-gray-600">
+                Automatically set to today’s date.
+              </p>
+            </fieldset>
+
             <div>
               <label htmlFor="description" className="block text-lg font-medium">
-                Description
+                Note
               </label>
               <textarea
                 id="description"
