@@ -87,6 +87,7 @@ export default function CreateAnimal({ currentUser }: CreateAnimalProps) {
           name: formData.get("name"),
           breed: formData.get("breed"),
           hoursTrained: Number(formData.get("hoursTrained")),
+          profilePicture: formData.get("profilePicture"),
           birthDate,
           note: formData.get("note"),
         }),
@@ -171,6 +172,20 @@ export default function CreateAnimal({ currentUser }: CreateAnimalProps) {
                 min="0"
                 step="any"
                 placeholder="0"
+                required
+                className={inputClassName}
+              />
+            </div>
+
+            <div>
+              <label htmlFor="profilePicture" className="block text-lg font-medium">
+                Profile picture URL
+              </label>
+              <input
+                id="profilePicture"
+                name="profilePicture"
+                type="url"
+                placeholder="https://example.com/animal.jpg"
                 required
                 className={inputClassName}
               />

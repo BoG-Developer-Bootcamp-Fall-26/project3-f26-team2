@@ -25,6 +25,7 @@ type AnimalRecord = {
   name: string;
   breed: string;
   hoursTrained: number;
+  profilePicture?: string;
 };
 
 export async function getServerSideProps(context: GetServerSidePropsContext) {
@@ -45,7 +46,7 @@ export async function getServerSideProps(context: GetServerSidePropsContext) {
       breed: animal.breed,
       owner: currentUser.fullName,
       hoursTrained: animal.hoursTrained,
-      photoUrl: "/images/sample-animal.png",
+      photoUrl: animal.profilePicture || "/images/sample-animal.png",
     };
   });
 
@@ -92,7 +93,9 @@ export default function AnimalsDashboard({
 
           <div className="mx-auto grid w-full max-w-[1380px] grid-cols-1 gap-6 px-6 py-8 sm:grid-cols-2 lg:px-12 xl:grid-cols-3">
             {animals.length === 0 && (
-              <p className="text-gray-600">No animals yet. Use Create new to add one.</p>
+              <p className="text-gray-600">
+                No animals yet. Use Create new to add one.
+              </p>
             )}
 
             {animals.map(function (animal) {
