@@ -14,25 +14,19 @@ import Animal from "@/models/Animal";
 const heebo = Heebo({ subsets: ["latin"] });
 
 const inputClassName =
-  "mt-2 w-full min-w-0 rounded-md border border-gray-300 bg-white px-3 py-3 text-base focus:border-[#D21312] focus:outline-2 focus:outline-[#D21312] sm:px-4 sm:text-lg";
-
-const months = [
-  "January", "February", "March", "April", "May", "June",
-  "July", "August", "September", "October", "November", "December",
-];
+  "mt-2 w-full rounded-md border border-gray-300 px-4 py-3 text-lg focus:border-[#D21312] focus:outline-2 focus:outline-[#D21312]";
 
 type CreateTrainingLogProps = {
   currentUser: {
     fullName: string;
     isAdmin: boolean;
   };
-  animals: { id: string; name: string; breed: string }[];
+  animals: { id: string; name: string }[];
 };
 
-type AnimalOptionRecord = {
+type AnimalRecord = {
   _id: { toString(): string };
   name: string;
-  breed: string;
 };
 
 export async function getServerSideProps(context: GetServerSidePropsContext) {
@@ -42,16 +36,12 @@ export async function getServerSideProps(context: GetServerSidePropsContext) {
     return { redirect: { destination: "/", permanent: false } };
   }
 
-  const records: AnimalOptionRecord[] = await Animal.find({
+  const records: AnimalRecord[] = await Animal.find({
     owner: currentUser.id,
   }).sort({ name: 1 });
 
   const animals = records.map(function (animal) {
-    return {
-      id: animal._id.toString(),
-      name: animal.name,
-      breed: animal.breed,
-    };
+    return { id: animal._id.toString(), name: animal.name };
   });
 
   return { props: { currentUser, animals } };
@@ -70,9 +60,10 @@ export default function CreateTrainingLog({
     if (saving || animals.length === 0) return;
 
     const formData = new FormData(event.currentTarget);
-    const year = String(formData.get("year"));
-    const month = String(formData.get("month")).padStart(2, "0");
-    const day = String(formData.get("day")).padStart(2, "0");
+    const today = new Date();
+    const year = today.getFullYear();
+    const month = String(today.getMonth() + 1).padStart(2, "0");
+    const day = String(today.getDate()).padStart(2, "0");
 
     setMessage("");
     setSaving(true);
@@ -82,10 +73,10 @@ export default function CreateTrainingLog({
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          animalId: formData.get("animalId"),
           title: formData.get("title"),
-          description: formData.get("description"),
+          animalId: String(formData.get("animalId")).trim(),
           hours: Number(formData.get("hours")),
+          description: formData.get("description"),
           date: `${year}-${month}-${day}`,
         }),
       });
@@ -144,35 +135,37 @@ export default function CreateTrainingLog({
 
             <div>
               <label htmlFor="animalId" className="block text-lg font-medium">
-                Select Animal
+                Animal ID
               </label>
-              <select
+              <input
                 id="animalId"
                 name="animalId"
-                defaultValue=""
+                type="text"
+                placeholder="Enter the animal’s ID"
                 required
                 className={inputClassName}
-              >
-                <option value="" disabled>Choose an animal</option>
-                {animals.map(function (animal) {
-                  return (
-                    <option key={animal.id} value={animal.id}>
-                      {animal.name} - {animal.breed}
-                    </option>
-                  );
-                })}
-              </select>
+              />
 
-              {animals.length === 0 && (
+              {animals.length === 0 ? (
                 <Link href="/animals/new" className="mt-2 block text-sm text-red-700 underline">
                   Add an animal before creating a training log.
                 </Link>
+              ) : (
+                <ul className="mt-2 space-y-1 text-sm text-gray-600">
+                  {animals.map(function (animal) {
+                    return (
+                      <li key={animal.id} className="break-words">
+                        {animal.name} · <code>{animal.id}</code>
+                      </li>
+                    );
+                  })}
+                </ul>
               )}
             </div>
 
             <div>
               <label htmlFor="hours" className="block text-lg font-medium">
-                Total hours trained
+                Hours trained
               </label>
               <input
                 id="hours"
@@ -184,62 +177,6 @@ export default function CreateTrainingLog({
                 required
                 className={inputClassName}
               />
-            </div>
-
-            <div className="grid grid-cols-[1.4fr_1fr_1.4fr] gap-3 sm:gap-6">
-              <div className="min-w-0">
-                <label htmlFor="month" className="block text-lg font-medium">
-                  Month
-                </label>
-                <select
-                  id="month"
-                  name="month"
-                  defaultValue=""
-                  required
-                  className={inputClassName}
-                >
-                  <option value="" disabled>Month</option>
-                  {months.map(function (month, index) {
-                    return (
-                      <option key={month} value={index + 1}>
-                        {month}
-                      </option>
-                    );
-                  })}
-                </select>
-              </div>
-
-              <div className="min-w-0">
-                <label htmlFor="day" className="block text-lg font-medium">
-                  Date
-                </label>
-                <input
-                  id="day"
-                  name="day"
-                  type="number"
-                  min="1"
-                  max="31"
-                  placeholder="20"
-                  required
-                  className={inputClassName}
-                />
-              </div>
-
-              <div className="min-w-0">
-                <label htmlFor="year" className="block text-lg font-medium">
-                  Year
-                </label>
-                <input
-                  id="year"
-                  name="year"
-                  type="number"
-                  min="1000"
-                  max="9999"
-                  placeholder="2026"
-                  required
-                  className={inputClassName}
-                />
-              </div>
             </div>
 
             <div>
