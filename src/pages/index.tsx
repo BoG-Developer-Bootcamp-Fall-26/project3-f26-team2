@@ -3,6 +3,11 @@ import Image from "next/image";
 import Link from "next/link";
 import { Heebo } from "next/font/google";
 import appLogo from "../../public/images/appLogo.png";
+import { useState } from "react";
+import { useRouter } from "next/router";
+
+
+
 
 const heebo = Heebo({ subsets: ["latin"] });
 
@@ -32,9 +37,36 @@ function CornerWave({ className }: { className: string }) {
 }
 
 export default function Home() {
-  function handleLogin(event: FormEvent<HTMLFormElement>) {
+  const [error, setError] = useState("");
+  const router = useRouter();
+
+  async function handleLogin(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    // backend logic goes here
+    setError("");
+
+    const formData = new FormData(event.currentTarget);
+
+    try {
+      const response = await fetch("/api/user/verify", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          email: formData.get("email"),
+          password: formData.get("password"),
+        }),
+      });
+
+      const result = await response.json();
+
+      if (!response.ok) {
+        setError(result.error || "Could not sign in.");
+        return;
+      }
+
+      await router.push("/training-logs");
+    } catch {
+      setError("Could not sign in. Try again.");
+    }
   }
 
   return (
@@ -96,6 +128,14 @@ export default function Home() {
             >
               Log in
             </button>
+
+            {error && (
+              <p role="alert" className="mt-3 text-red-700">
+                {error}
+              </p>
+            )}
+
+
           </form>
 
           <p className="mt-8 text-center text-lg font-light sm:text-[25px]">

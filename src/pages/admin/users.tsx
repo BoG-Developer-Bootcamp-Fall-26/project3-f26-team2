@@ -1,38 +1,66 @@
+import type { GetServerSidePropsContext } from "next";
 import Image from "next/image";
 import { Heebo } from "next/font/google";
+import type { Model } from "mongoose";
 
 import appLogo from "../../../public/images/appLogo.png";
 import Sidebar from "../../components/Sidebar";
+import { getSignedInUser } from "@/lib/auth";
+import UserModel from "@/models/User";
 
 const heebo = Heebo({ subsets: ["latin"] });
 
+type UserRecord = {
+  fullName: string;
+  email: string;
+  admin: boolean;
+};
+
 type User = {
-  id: number;
+  id: string;
   name: string;
   email: string;
   isAdmin: boolean;
 };
 
-const users: User[] = [
-  {
-    id: 1,
-    name: "Jordan Lee",
-    email: "jordan@example.com",
-    isAdmin: true,
-  },
-  {
-    id: 2,
-    name: "Taylor Brooks",
-    email: "taylor@example.com",
-    isAdmin: false,
-  },
-  {
-    id: 3,
-    name: "Morgan Patel",
-    email: "morgan@example.com",
-    isAdmin: false,
-  },
-];
+type AllUsersProps = {
+  currentUser: {
+    fullName: string;
+    isAdmin: boolean;
+  };
+  users: User[];
+};
+
+export async function getServerSideProps(context: GetServerSidePropsContext) {
+  context.res.setHeader("Cache-Control", "private, no-store");
+
+  const currentUser = await getSignedInUser(context.req.cookies.session);
+
+  if (!currentUser) {
+    return { redirect: { destination: "/", permanent: false } };
+  }
+
+  if (!currentUser.isAdmin) {
+    return { redirect: { destination: "/training-logs", permanent: false } };
+  }
+
+  const usersModel = UserModel as Model<UserRecord>;
+  const records = await usersModel
+    .find()
+    .select("fullName email admin")
+    .sort({ fullName: 1 });
+
+  const users: User[] = records.map(function (user) {
+    return {
+      id: user._id.toString(),
+      name: user.fullName,
+      email: user.email,
+      isAdmin: user.admin === true,
+    };
+  });
+
+  return { props: { currentUser, users } };
+}
 
 function UserCard({ user }: { user: User }) {
   return (
@@ -57,7 +85,7 @@ function UserCard({ user }: { user: User }) {
   );
 }
 
-export default function AllUsers() {
+export default function AllUsers({ currentUser, users }: AllUsersProps) {
   return (
     <div className={`${heebo.className} flex min-h-screen flex-col bg-white text-black`}>
       <header className="relative z-10 flex h-20 shrink-0 items-center bg-white px-6 shadow-[0_4px_4px_rgba(0,0,0,0.25)] sm:h-[102px] sm:px-[49px]">
@@ -66,8 +94,8 @@ export default function AllUsers() {
 
       <div className="flex flex-1 flex-col md:flex-row">
         <Sidebar
-          userName="Jordan Lee"
-          isAdmin={true}
+          userName={currentUser.fullName}
+          isAdmin={currentUser.isAdmin}
           activePage="/admin/users"
         />
 
@@ -79,6 +107,10 @@ export default function AllUsers() {
           </div>
 
           <div className="mx-auto grid w-full max-w-[1380px] grid-cols-1 gap-6 px-6 py-8 sm:grid-cols-2 lg:px-12 xl:grid-cols-3">
+            {users.length === 0 && (
+              <p className="text-gray-600">No users found.</p>
+            )}
+
             {users.map(function (user) {
               return <UserCard key={user.id} user={user} />;
             })}

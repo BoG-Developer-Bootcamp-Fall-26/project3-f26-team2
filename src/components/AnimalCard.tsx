@@ -1,7 +1,7 @@
 import Image from "next/image";
 
 export type Animal = {
-  id: number;
+  id: string | number;
   name: string;
   breed: string;
   owner: string;

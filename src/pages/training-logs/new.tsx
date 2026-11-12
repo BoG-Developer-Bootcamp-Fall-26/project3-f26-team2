@@ -1,11 +1,15 @@
 import { useState } from "react";
 import type { FormEvent } from "react";
+import type { GetServerSidePropsContext } from "next";
 import Image from "next/image";
 import Link from "next/link";
 import { Heebo } from "next/font/google";
+import { useRouter } from "next/router";
 
 import appLogo from "../../../public/images/appLogo.png";
 import Sidebar from "../../components/Sidebar";
+import { getSignedInUser } from "@/lib/auth";
+import Animal from "@/models/Animal";
 
 const heebo = Heebo({ subsets: ["latin"] });
 
@@ -13,43 +17,91 @@ const inputClassName =
   "mt-2 w-full min-w-0 rounded-md border border-gray-300 bg-white px-3 py-3 text-base focus:border-[#D21312] focus:outline-2 focus:outline-[#D21312] sm:px-4 sm:text-lg";
 
 const months = [
-  "January",
-  "February",
-  "March",
-  "April",
-  "May",
-  "June",
-  "July",
-  "August",
-  "September",
-  "October",
-  "November",
-  "December",
+  "January", "February", "March", "April", "May", "June",
+  "July", "August", "September", "October", "November", "December",
 ];
 
-export default function CreateTrainingLog() {
-  const [message, setMessage] = useState("");
+type CreateTrainingLogProps = {
+  currentUser: {
+    fullName: string;
+    isAdmin: boolean;
+  };
+  animals: { id: string; name: string; breed: string }[];
+};
 
-  function handleSave(event: FormEvent<HTMLFormElement>) {
+type AnimalOptionRecord = {
+  _id: { toString(): string };
+  name: string;
+  breed: string;
+};
+
+export async function getServerSideProps(context: GetServerSidePropsContext) {
+  const currentUser = await getSignedInUser(context.req.cookies.session);
+
+  if (!currentUser) {
+    return { redirect: { destination: "/", permanent: false } };
+  }
+
+  const records: AnimalOptionRecord[] = await Animal.find({
+    owner: currentUser.id,
+  }).sort({ name: 1 });
+
+  const animals = records.map(function (animal) {
+    return {
+      id: animal._id.toString(),
+      name: animal.name,
+      breed: animal.breed,
+    };
+  });
+
+  return { props: { currentUser, animals } };
+}
+
+export default function CreateTrainingLog({
+  currentUser,
+  animals,
+}: CreateTrainingLogProps) {
+  const router = useRouter();
+  const [message, setMessage] = useState("");
+  const [saving, setSaving] = useState(false);
+
+  async function handleSave(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    if (saving || animals.length === 0) return;
 
     const formData = new FormData(event.currentTarget);
-    const month = Number(formData.get("month"));
-    const day = Number(formData.get("day"));
-    const year = Number(formData.get("year"));
+    const year = String(formData.get("year"));
+    const month = String(formData.get("month")).padStart(2, "0");
+    const day = String(formData.get("day")).padStart(2, "0");
 
-    const logDate = new Date(year, month - 1, day);
+    setMessage("");
+    setSaving(true);
 
-    if (logDate.getMonth() !== month - 1 || logDate.getDate() !== day) {
-      setMessage("Enter a valid training date.");
-      return;
+    try {
+      const response = await fetch("/api/training", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          animalId: formData.get("animalId"),
+          title: formData.get("title"),
+          description: formData.get("description"),
+          hours: Number(formData.get("hours")),
+          date: `${year}-${month}-${day}`,
+        }),
+      });
+
+      if (!response.ok) {
+        const result = await response.json();
+        setMessage(result.error || "Could not save the training log.");
+        return;
+      }
+
+      await router.push("/training-logs");
+    } catch {
+      setMessage("Could not save the training log. Try again.");
+    } finally {
+      setSaving(false);
     }
-
-    // Connect the create-log endpoint here when it's ready
-    
-    setMessage(
-      `Log date: ${logDate.toLocaleDateString()}. Saving will be available once the API is connected.`
-    );
   }
 
   return (
@@ -59,7 +111,11 @@ export default function CreateTrainingLog() {
       </header>
 
       <div className="flex flex-1 flex-col md:flex-row">
-        <Sidebar userName="Jordan Lee" isAdmin={true} activePage="/training-logs" />
+        <Sidebar
+          userName={currentUser.fullName}
+          isAdmin={currentUser.isAdmin}
+          activePage="/training-logs"
+        />
 
         <main className="flex min-w-0 flex-1 flex-col">
           <div className="border-b border-gray-200 px-6 py-5 lg:px-12">
@@ -98,8 +154,20 @@ export default function CreateTrainingLog() {
                 className={inputClassName}
               >
                 <option value="" disabled>Choose an animal</option>
-                <option value="1">Lucy - Golden Retriever</option>
+                {animals.map(function (animal) {
+                  return (
+                    <option key={animal.id} value={animal.id}>
+                      {animal.name} - {animal.breed}
+                    </option>
+                  );
+                })}
               </select>
+
+              {animals.length === 0 && (
+                <Link href="/animals/new" className="mt-2 block text-sm text-red-700 underline">
+                  Add an animal before creating a training log.
+                </Link>
+              )}
             </div>
 
             <div>
@@ -119,7 +187,7 @@ export default function CreateTrainingLog() {
             </div>
 
             <div className="grid grid-cols-[1.4fr_1fr_1.4fr] gap-3 sm:gap-6">
-              <div>
+              <div className="min-w-0">
                 <label htmlFor="month" className="block text-lg font-medium">
                   Month
                 </label>
@@ -141,7 +209,7 @@ export default function CreateTrainingLog() {
                 </select>
               </div>
 
-              <div>
+              <div className="min-w-0">
                 <label htmlFor="day" className="block text-lg font-medium">
                   Date
                 </label>
@@ -157,7 +225,7 @@ export default function CreateTrainingLog() {
                 />
               </div>
 
-              <div>
+              <div className="min-w-0">
                 <label htmlFor="year" className="block text-lg font-medium">
                   Year
                 </label>
@@ -198,14 +266,15 @@ export default function CreateTrainingLog() {
 
               <button
                 type="submit"
-                className="cursor-pointer rounded-md bg-[#D21312] px-8 py-3 font-medium text-white hover:bg-[#B51010]"
+                disabled={saving || animals.length === 0}
+                className="cursor-pointer rounded-md bg-[#D21312] px-8 py-3 font-medium text-white hover:bg-[#B51010] disabled:opacity-50"
               >
-                Save
+                {saving ? "Saving..." : "Save"}
               </button>
             </div>
 
             {message && (
-              <p role="status" className="text-sm text-gray-600">
+              <p role="alert" className="text-sm text-red-700">
                 {message}
               </p>
             )}

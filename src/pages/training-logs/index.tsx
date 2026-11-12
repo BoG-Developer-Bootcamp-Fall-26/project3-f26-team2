@@ -1,55 +1,66 @@
+import type { GetServerSidePropsContext } from "next";
 import Image from "next/image";
 import Link from "next/link";
 import { Heebo } from "next/font/google";
+
 import appLogo from "../../../public/images/appLogo.png";
 import Sidebar from "../../components/Sidebar";
 import TrainingLogCard from "../../components/TrainingLogCard";
+import type { TrainingLog as TrainingLogCardData } from "../../components/TrainingLogCard";
+import { getSignedInUser } from "@/lib/auth";
+import Animal from "@/models/Animal";
+import TrainingLog from "@/models/TrainingLog";
 
 const heebo = Heebo({ subsets: ["latin"] });
 
-const currentUser = {
-  name: "Jordan Lee",
-  isAdmin: true,
+type DashboardProps = {
+  currentUser: {
+    id: string;
+    fullName: string;
+    isAdmin: boolean;
+  };
+  trainingLogs: TrainingLogCardData[];
 };
 
-const trainingLogs = [
-  {
-    id: 1,
-    title: "Practice loose-leash walking",
-    date: "2026-11-08",
-    userName: "Jordan Lee",
-    animalName: "Lucy",
-    breed: "Golden Retriever",
-    hours: 2,
-    description: "Lucy stayed close on the trail and checked in at each turn.",
-  },
-  {
-    id: 2,
-    title: "Complete sit lessons",
-    date: "2026-11-10",
-    userName: "Jordan Lee",
-    animalName: "Lucy",
-    breed: "Golden Retriever",
-    hours: 1,
-    description: "Lucy practiced sitting on cue in a new environment.",
-  },
-  {
-    id: 3,
-    title: "Practice recall",
-    date: "2026-11-09",
-    userName: "Jordan Lee",
-    animalName: "Milo",
-    breed: "Labrador Retriever",
-    hours: 1.5,
-    description: "Milo returned on cue during short training sessions in the yard.",
-  },
-];
+export async function getServerSideProps(context: GetServerSidePropsContext) {
+  context.res.setHeader("Cache-Control", "private, no-store");
 
-export default function TrainingLogsDashboard() {
-  const sortedLogs = [...trainingLogs].sort(function (firstLog, secondLog) {
-    return secondLog.date.localeCompare(firstLog.date);
+  const currentUser = await getSignedInUser(context.req.cookies.session);
+
+  if (!currentUser) {
+    return {
+      redirect: { destination: "/", permanent: false },
+    };
+  }
+
+  const records = await TrainingLog.find({ user: currentUser.id })
+    .sort({ date: -1, _id: -1 })
+    .populate<{ animal: { name: string; breed: string } | null }>({
+      path: "animal",
+      model: Animal,
+      select: "name breed",
+    });
+
+  const trainingLogs: TrainingLogCardData[] = records.map(function (log) {
+    return {
+      id: log._id.toString(),
+      title: log.title,
+      date: log.date.toISOString(),
+      userName: currentUser.fullName,
+      animalName: log.animal?.name ?? "Unknown animal",
+      breed: log.animal?.breed ?? "Unknown breed",
+      hours: log.hours,
+      description: log.description,
+    };
   });
 
+  return { props: { currentUser, trainingLogs } };
+}
+
+export default function TrainingLogsDashboard({
+  currentUser,
+  trainingLogs,
+}: DashboardProps) {
   return (
     <div className={`${heebo.className} flex min-h-screen flex-col bg-white text-black`}>
       <header className="relative z-10 flex h-20 shrink-0 items-center bg-white px-6 shadow-[0_4px_4px_rgba(0,0,0,0.25)] sm:h-[102px] sm:px-[49px]">
@@ -58,7 +69,7 @@ export default function TrainingLogsDashboard() {
 
       <div className="flex flex-1 flex-col md:flex-row">
         <Sidebar
-          userName={currentUser.name}
+          userName={currentUser.fullName}
           isAdmin={currentUser.isAdmin}
           activePage="/training-logs"
         />
@@ -85,7 +96,13 @@ export default function TrainingLogsDashboard() {
           </div>
 
           <div className="mx-auto w-full max-w-[1260px] space-y-6 px-6 py-8 lg:px-12">
-            {sortedLogs.map(function (log) {
+            {trainingLogs.length === 0 && (
+              <p className="text-gray-600">
+                No training logs yet. Use Create new to add one.
+              </p>
+            )}
+
+            {trainingLogs.map(function (log) {
               return <TrainingLogCard key={log.id} log={log} />;
             })}
           </div>

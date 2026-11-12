@@ -9,7 +9,7 @@ const monthAndYear = new Intl.DateTimeFormat("en-US", {
 });
 
 export type TrainingLog = {
-  id: number;
+  id: string | number;
   title: string;
   date: string;
   userName: string;

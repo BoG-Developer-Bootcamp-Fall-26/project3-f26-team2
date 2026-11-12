@@ -1,3 +1,4 @@
+import type { GetServerSidePropsContext } from "next";
 import Image from "next/image";
 import { Heebo } from "next/font/google";
 
@@ -5,37 +6,64 @@ import appLogo from "../../../public/images/appLogo.png";
 import Sidebar from "../../components/Sidebar";
 import TrainingLogCard from "../../components/TrainingLogCard";
 import type { TrainingLog } from "../../components/TrainingLogCard";
+import { getSignedInUser } from "@/lib/auth";
+import Animal from "@/models/Animal";
+import TrainingLogModel from "@/models/TrainingLog";
+import User from "@/models/User";
 
 const heebo = Heebo({ subsets: ["latin"] });
 
-const sampleLogs: TrainingLog[] = [
-  {
-    id: 1,
-    title: "Complete sit lessons",
-    date: "2026-11-10",
-    userName: "Jordan Lee",
-    animalName: "Lucy",
-    breed: "Golden Retriever",
-    hours: 1,
-    description: "Lucy practiced sitting on cue in a new environment.",
-  },
-  {
-    id: 2,
-    title: "Practice leash walking",
-    date: "2026-11-09",
-    userName: "Taylor Brooks",
-    animalName: "Scout",
-    breed: "Border Collie",
-    hours: 1.5,
-    description: "Scout practiced keeping the leash loose during a walk.",
-  },
-];
+type AllTrainingLogsProps = {
+  currentUser: {
+    fullName: string;
+    isAdmin: boolean;
+  };
+  trainingLogs: TrainingLog[];
+};
 
-export default function AllTrainingLogs() {
-  const sortedLogs = [...sampleLogs].sort(function (firstLog, secondLog) {
-    return secondLog.date.localeCompare(firstLog.date);
+export async function getServerSideProps(context: GetServerSidePropsContext) {
+  context.res.setHeader("Cache-Control", "private, no-store");
+
+  const currentUser = await getSignedInUser(context.req.cookies.session);
+
+  if (!currentUser) {
+    return { redirect: { destination: "/", permanent: false } };
+  }
+
+  if (!currentUser.isAdmin) {
+    return { redirect: { destination: "/training-logs", permanent: false } };
+  }
+
+  const records = await TrainingLogModel.find()
+    .sort({ date: -1, _id: -1 })
+    .populate<{
+      user: { fullName: string } | null;
+      animal: { name: string; breed: string } | null;
+    }>([
+      { path: "user", model: User, select: "fullName" },
+      { path: "animal", model: Animal, select: "name breed" },
+    ]);
+
+  const trainingLogs: TrainingLog[] = records.map(function (log) {
+    return {
+      id: log._id.toString(),
+      title: log.title,
+      date: log.date.toISOString(),
+      userName: log.user?.fullName ?? "Unknown trainer",
+      animalName: log.animal?.name ?? "Unknown animal",
+      breed: log.animal?.breed ?? "Unknown breed",
+      hours: log.hours,
+      description: log.description,
+    };
   });
 
+  return { props: { currentUser, trainingLogs } };
+}
+
+export default function AllTrainingLogs({
+  currentUser,
+  trainingLogs,
+}: AllTrainingLogsProps) {
   return (
     <div className={`${heebo.className} flex min-h-screen flex-col bg-white text-black`}>
       <header className="relative z-10 flex h-20 shrink-0 items-center bg-white px-6 shadow-[0_4px_4px_rgba(0,0,0,0.25)] sm:h-[102px] sm:px-[49px]">
@@ -44,8 +72,8 @@ export default function AllTrainingLogs() {
 
       <div className="flex flex-1 flex-col md:flex-row">
         <Sidebar
-          userName="Jordan Lee"
-          isAdmin={true}
+          userName={currentUser.fullName}
+          isAdmin={currentUser.isAdmin}
           activePage="/admin/training-logs"
         />
 
@@ -57,7 +85,11 @@ export default function AllTrainingLogs() {
           </div>
 
           <div className="mx-auto w-full max-w-[1260px] space-y-6 px-6 py-8 lg:px-12">
-            {sortedLogs.map(function (log) {
+            {trainingLogs.length === 0 && (
+              <p className="text-gray-600">No training logs have been added yet.</p>
+            )}
+
+            {trainingLogs.map(function (log) {
               return <TrainingLogCard key={log.id} log={log} />;
             })}
           </div>

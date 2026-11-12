@@ -1,11 +1,14 @@
 import { useState } from "react";
 import type { FormEvent } from "react";
+import type { GetServerSidePropsContext } from "next";
 import Image from "next/image";
 import Link from "next/link";
 import { Heebo } from "next/font/google";
+import { useRouter } from "next/router";
 
 import appLogo from "../../../public/images/appLogo.png";
 import Sidebar from "../../components/Sidebar";
+import { getSignedInUser } from "@/lib/auth";
 
 const heebo = Heebo({ subsets: ["latin"] });
 
@@ -17,16 +20,40 @@ const months = [
   "July", "August", "September", "October", "November", "December",
 ];
 
-export default function CreateAnimal() {
-  const [message, setMessage] = useState("");
+type CreateAnimalProps = {
+  currentUser: {
+    fullName: string;
+    isAdmin: boolean;
+  };
+};
 
-  function handleSave(event: FormEvent<HTMLFormElement>) {
+export async function getServerSideProps(context: GetServerSidePropsContext) {
+  const currentUser = await getSignedInUser(context.req.cookies.session);
+
+  if (!currentUser) {
+    return { redirect: { destination: "/", permanent: false } };
+  }
+
+  return { props: { currentUser } };
+}
+
+export default function CreateAnimal({ currentUser }: CreateAnimalProps) {
+  const router = useRouter();
+  const [message, setMessage] = useState("");
+  const [saving, setSaving] = useState(false);
+
+  async function handleSave(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    if (saving) return;
+
+    setMessage("");
 
     const formData = new FormData(event.currentTarget);
     const month = Number(formData.get("birthMonth"));
     const day = Number(formData.get("birthDay"));
     const year = Number(formData.get("birthYear"));
+
+    let birthDate: string | null = null;
 
     if (month || day || year) {
       if (!month || !day || !year) {
@@ -34,17 +61,50 @@ export default function CreateAnimal() {
         return;
       }
 
-      const birthDate = new Date(year, month - 1, day);
+      const date = new Date(year, month - 1, day);
 
-      if (birthDate.getMonth() !== month - 1 || birthDate.getDate() !== day) {
+      if (
+        date.getFullYear() !== year ||
+        date.getMonth() !== month - 1 ||
+        date.getDate() !== day
+      ) {
         setMessage("Enter a valid birth date.");
         return;
       }
+
+      const monthText = String(month).padStart(2, "0");
+      const dayText = String(day).padStart(2, "0");
+      birthDate = `${year}-${monthText}-${dayText}`;
     }
 
-    // Connect the create-animal endpoint here when it's ready 
-    
-    setMessage("The form is valid. Saving will be available once the API is connected.");
+    setSaving(true);
+
+    try {
+      const response = await fetch("/api/animal", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: formData.get("name"),
+          breed: formData.get("breed"),
+          hoursTrained: Number(formData.get("hoursTrained")),
+          birthDate,
+          note: formData.get("note"),
+        }),
+      });
+
+      const result = await response.json();
+
+      if (!response.ok) {
+        setMessage(result.error || "Could not save the animal.");
+        return;
+      }
+
+      await router.push("/animals");
+    } catch {
+      setMessage("Could not save the animal. Try again.");
+    } finally {
+      setSaving(false);
+    }
   }
 
   return (
@@ -54,7 +114,11 @@ export default function CreateAnimal() {
       </header>
 
       <div className="flex flex-1 flex-col md:flex-row">
-        <Sidebar userName="Jordan Lee" isAdmin={true} activePage="/animals" />
+        <Sidebar
+          userName={currentUser.fullName}
+          isAdmin={currentUser.isAdmin}
+          activePage="/animals"
+        />
 
         <main className="flex min-w-0 flex-1 flex-col">
           <div className="border-b border-gray-200 px-6 py-5 lg:px-12">
@@ -111,7 +175,6 @@ export default function CreateAnimal() {
                 className={inputClassName}
               />
             </div>
-
 
             <div className="grid grid-cols-[1.4fr_1fr_1.4fr] gap-3 sm:gap-5">
               <div className="min-w-0">
@@ -189,14 +252,15 @@ export default function CreateAnimal() {
 
               <button
                 type="submit"
-                className="cursor-pointer rounded-md bg-[#D21312] px-8 py-3 font-medium text-white hover:bg-[#B51010]"
+                disabled={saving}
+                className="cursor-pointer rounded-md bg-[#D21312] px-8 py-3 font-medium text-white hover:bg-[#B51010] disabled:opacity-50"
               >
-                Save
+                {saving ? "Saving..." : "Save"}
               </button>
             </div>
 
             {message && (
-              <p role="status" className="text-sm text-gray-600">
+              <p role="alert" className="text-sm text-red-700">
                 {message}
               </p>
             )}

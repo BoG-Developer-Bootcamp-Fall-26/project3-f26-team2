@@ -3,6 +3,7 @@ import type { FormEvent } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import { Heebo } from "next/font/google";
+import { useRouter } from "next/router";
 
 import appLogo from "../../public/images/appLogo.png";
 
@@ -37,10 +38,16 @@ function CornerWave({ className }: { className: string }) {
 }
 
 export default function CreateAccount() {
+  const router = useRouter();
   const [error, setError] = useState("");
+  const [isAdmin, setIsAdmin] = useState(false);
+  const [saving, setSaving] = useState(false);
 
-  function handleSignUp(event: FormEvent<HTMLFormElement>) {
+  async function handleSignUp(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    if (saving) return;
+
+    setError("");
 
     const formData = new FormData(event.currentTarget);
     const password = formData.get("password");
@@ -51,12 +58,34 @@ export default function CreateAccount() {
       return;
     }
 
-    setError("");
-    // Connect the team's create-account endpoint here when it's ready.
-  }
+    setSaving(true);
 
-  function clearError() {
-    setError("");
+    try {
+      const response = await fetch("/api/user", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          fullName: formData.get("fullName"),
+          email: formData.get("email"),
+          password,
+          confirmPassword,
+          isAdmin,
+          adminCode: formData.get("adminCode"),
+        }),
+      });
+
+      if (!response.ok) {
+        const result = await response.json();
+        setError(result.error || "Could not create the account.");
+        return;
+      }
+
+      await router.push("/training-logs");
+    } catch {
+      setError("Could not complete signup. Try again.");
+    } finally {
+      setSaving(false);
+    }
   }
 
   return (
@@ -82,9 +111,7 @@ export default function CreateAccount() {
           <form onSubmit={handleSignUp} className="mt-8 sm:mt-10">
             <div className="space-y-5 sm:space-y-8">
               <div>
-                <label htmlFor="fullName" className="sr-only">
-                  Full Name
-                </label>
+                <label htmlFor="fullName" className="sr-only">Full Name</label>
                 <input
                   id="fullName"
                   name="fullName"
@@ -97,9 +124,7 @@ export default function CreateAccount() {
               </div>
 
               <div>
-                <label htmlFor="email" className="sr-only">
-                  Email
-                </label>
+                <label htmlFor="email" className="sr-only">Email</label>
                 <input
                   id="email"
                   name="email"
@@ -112,16 +137,15 @@ export default function CreateAccount() {
               </div>
 
               <div>
-                <label htmlFor="password" className="sr-only">
-                  Password
-                </label>
+                <label htmlFor="password" className="sr-only">Password</label>
                 <input
                   id="password"
                   name="password"
                   type="password"
                   autoComplete="new-password"
                   placeholder="Password"
-                  onChange={clearError}
+                  minLength={8}
+                  maxLength={128}
                   required
                   className={inputClassName}
                 />
@@ -137,18 +161,9 @@ export default function CreateAccount() {
                   type="password"
                   autoComplete="new-password"
                   placeholder="Confirm Password"
-                  onChange={clearError}
-                  aria-invalid={Boolean(error)}
-                  aria-describedby={error ? "password-error" : undefined}
                   required
                   className={inputClassName}
                 />
-
-                {error && (
-                  <p id="password-error" role="alert" className="mt-2 text-[#B51010]">
-                    {error}
-                  </p>
-                )}
               </div>
             </div>
 
@@ -156,16 +171,43 @@ export default function CreateAccount() {
               <input
                 name="isAdmin"
                 type="checkbox"
+                checked={isAdmin}
+                onChange={function (event) {
+                  setIsAdmin(event.target.checked);
+                }}
                 className="h-5 w-5 accent-[#D21312] sm:h-[25px] sm:w-[25px]"
               />
               Admin access
             </label>
 
+            {isAdmin && (
+              <div className="mt-4">
+                <label htmlFor="adminCode" className="sr-only">
+                  Admin signup code
+                </label>
+                <input
+                  id="adminCode"
+                  name="adminCode"
+                  type="password"
+                  placeholder="Admin signup code"
+                  required
+                  className={inputClassName}
+                />
+              </div>
+            )}
+
+            {error && (
+              <p role="alert" className="mt-4 text-[#B51010]">
+                {error}
+              </p>
+            )}
+
             <button
               type="submit"
-              className="mt-8 flex h-14 w-full cursor-pointer items-center justify-center rounded-[20px] bg-[#D21312] text-2xl font-medium text-white hover:bg-[#B51010] sm:mt-10 sm:h-[70px] sm:text-[40px]"
+              disabled={saving}
+              className="mt-8 flex h-14 w-full cursor-pointer items-center justify-center rounded-[20px] bg-[#D21312] text-2xl font-medium text-white hover:bg-[#B51010] disabled:opacity-50 sm:mt-10 sm:h-[70px] sm:text-[40px]"
             >
-              Sign up
+              {saving ? "Creating account..." : "Sign up"}
             </button>
           </form>
 

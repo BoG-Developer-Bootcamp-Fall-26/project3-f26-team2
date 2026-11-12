@@ -1,3 +1,4 @@
+import type { GetServerSidePropsContext } from "next";
 import Image from "next/image";
 import Link from "next/link";
 import { Heebo } from "next/font/google";
@@ -6,26 +7,55 @@ import appLogo from "../../../public/images/appLogo.png";
 import AnimalCard from "../../components/AnimalCard";
 import type { Animal } from "../../components/AnimalCard";
 import Sidebar from "../../components/Sidebar";
+import { getSignedInUser } from "@/lib/auth";
+import AnimalModel from "@/models/Animal";
 
 const heebo = Heebo({ subsets: ["latin"] });
 
-const currentUser = {
-  name: "Jordan Lee",
-  isAdmin: true,
+type AnimalsDashboardProps = {
+  currentUser: {
+    fullName: string;
+    isAdmin: boolean;
+  };
+  animals: Animal[];
 };
 
-const animals: Animal[] = [
-  {
-    id: 1,
-    name: "Lucy",
-    breed: "Golden Retriever",
-    owner: currentUser.name,
-    hoursTrained: 24,
-    photoUrl: "/images/sample-animal.png",
-  },
-];
+type AnimalRecord = {
+  _id: { toString(): string };
+  name: string;
+  breed: string;
+  hoursTrained: number;
+};
 
-export default function AnimalsDashboard() {
+export async function getServerSideProps(context: GetServerSidePropsContext) {
+  const currentUser = await getSignedInUser(context.req.cookies.session);
+
+  if (!currentUser) {
+    return { redirect: { destination: "/", permanent: false } };
+  }
+
+  const records: AnimalRecord[] = await AnimalModel.find({
+    owner: currentUser.id,
+  }).sort({ name: 1 });
+
+  const animals = records.map(function (animal) {
+    return {
+      id: animal._id.toString(),
+      name: animal.name,
+      breed: animal.breed,
+      owner: currentUser.fullName,
+      hoursTrained: animal.hoursTrained,
+      photoUrl: "/images/sample-animal.png",
+    };
+  });
+
+  return { props: { currentUser, animals } };
+}
+
+export default function AnimalsDashboard({
+  currentUser,
+  animals,
+}: AnimalsDashboardProps) {
   return (
     <div className={`${heebo.className} flex min-h-screen flex-col bg-white text-black`}>
       <header className="relative z-10 flex h-20 shrink-0 items-center bg-white px-6 shadow-[0_4px_4px_rgba(0,0,0,0.25)] sm:h-[102px] sm:px-[49px]">
@@ -34,7 +64,7 @@ export default function AnimalsDashboard() {
 
       <div className="flex flex-1 flex-col md:flex-row">
         <Sidebar
-          userName={currentUser.name}
+          userName={currentUser.fullName}
           isAdmin={currentUser.isAdmin}
           activePage="/animals"
         />
@@ -61,6 +91,10 @@ export default function AnimalsDashboard() {
           </div>
 
           <div className="mx-auto grid w-full max-w-[1380px] grid-cols-1 gap-6 px-6 py-8 sm:grid-cols-2 lg:px-12 xl:grid-cols-3">
+            {animals.length === 0 && (
+              <p className="text-gray-600">No animals yet. Use Create new to add one.</p>
+            )}
+
             {animals.map(function (animal) {
               return <AnimalCard key={animal.id} animal={animal} />;
             })}

@@ -1,3 +1,4 @@
+import { useState } from "react";
 import Image from "next/image";
 import Link from "next/link";
 
@@ -44,6 +45,29 @@ const adminLinks = [
 ];
 
 export default function Sidebar({ userName, isAdmin, activePage }: SidebarProps) {
+  const [loggingOut, setLoggingOut] = useState(false);
+  const [logoutError, setLogoutError] = useState("");
+
+  async function handleLogout() {
+    if (loggingOut) return;
+
+    setLoggingOut(true);
+    setLogoutError("");
+
+    try {
+      const response = await fetch("/api/user/logout", { method: "POST" });
+
+      if (!response.ok) {
+        throw new Error("Logout failed");
+      }
+
+      window.location.replace("/");
+    } catch {
+      setLogoutError("Could not log out. Try again.");
+      setLoggingOut(false);
+    }
+  }
+
   function renderLink(link: (typeof userLinks)[number]) {
     const isActive = activePage === link.href;
     const icon = isActive ? link.activeIcon : link.inactiveIcon;
@@ -99,7 +123,13 @@ export default function Sidebar({ userName, isAdmin, activePage }: SidebarProps)
             </p>
           </div>
 
-          <Link href="/" aria-label="Log out" className="rounded-md p-2 hover:bg-gray-100">
+          <button
+            type="button"
+            onClick={handleLogout}
+            disabled={loggingOut}
+            aria-label={loggingOut ? "Logging out" : "Log out"}
+            className="cursor-pointer rounded-md p-2 hover:bg-gray-100 disabled:opacity-50"
+          >
             <Image
               src="/images/logoutLogo.png"
               alt=""
@@ -107,8 +137,14 @@ export default function Sidebar({ userName, isAdmin, activePage }: SidebarProps)
               height={24}
               className="h-6 w-6 object-contain"
             />
-          </Link>
+          </button>
         </div>
+
+        {logoutError && (
+          <p role="alert" className="mt-2 text-sm text-red-700">
+            {logoutError}
+          </p>
+        )}
       </div>
     </aside>
   );
